@@ -84,7 +84,7 @@ choco install nodejs-lts yt-dlp ffmpeg
 ```bash
 git clone https://github.com/arefur-rahman/youtube-downloader-chrome-extension.git
 ```
-Or, download the zip file from [here](https://github.com/arefur-rahman/youtube-downloader-chrome-extension/releases).
+Or, download the zip file from [here](https://github.com/arefur-rahman/youtube-downloader-chrome-extension/releases) and unzip it.
 
 ```bash
 cd youtube-downloader-chrome-extension
@@ -161,7 +161,7 @@ choco install nodejs-lts yt-dlp ffmpeg
 git clone https://github.com/arefur-rahman/youtube-downloader-chrome-extension.git
 ```
 
-অথবা, [এখানে](https://github.com/arefur-rahman/youtube-downloader-chrome-extension/releases) থেকে zip ফাইল ডাউনলোড করুন।
+অথবা, [এখানে](https://github.com/arefur-rahman/youtube-downloader-chrome-extension/releases) থেকে zip ফাইল ডাউনলোড করে আনজিপ করুন।
 
 ```bash
 cd youtube-downloader-chrome-extension
