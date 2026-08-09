@@ -1,0 +1,5 @@
+.DS_Store
+downloads/
+*.zip
+node_modules/
+dist/
