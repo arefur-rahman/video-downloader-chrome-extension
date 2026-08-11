@@ -199,9 +199,20 @@ body {
 }
 
 @keyframes pulse {
-    0% { transform: scale(0.95); opacity: 0.8; }
-    50% { transform: scale(1.3); opacity: 1; }
-    100% { transform: scale(0.95); opacity: 0.8; }
+    0% {
+        transform: scale(0.95);
+        opacity: 0.8;
+    }
+
+    50% {
+        transform: scale(1.3);
+        opacity: 1;
+    }
+
+    100% {
+        transform: scale(0.95);
+        opacity: 0.8;
+    }
 }
 
 /* Tabs */
@@ -460,7 +471,9 @@ body {
 }
 
 @keyframes spin {
-    to { transform: rotate(360deg); }
+    to {
+        transform: rotate(360deg);
+    }
 }
 
 /* Error & Notice Banners */
@@ -474,8 +487,15 @@ body {
 }
 
 @keyframes fadeIn {
-    from { opacity: 0; transform: translateY(-4px); }
-    to { opacity: 1; transform: translateY(0); }
+    from {
+        opacity: 0;
+        transform: translateY(-4px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
 }
 
 .banner-error {
@@ -498,4 +518,61 @@ body {
     border: 1px solid rgba(16, 185, 129, 0.3);
     color: #6ee7b7;
     text-align: center;
+}
+
+/* Footer & Links */
+.footer {
+    margin-top: 16px;
+    padding-top: 12px;
+    border-top: 1px dashed rgba(255, 255, 255, 0.1);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.footer-brand {
+    font-size: 11px;
+    color: var(--text-dim);
+    font-weight: 500;
+}
+
+.donation-container {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.footer-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--text-muted);
+    text-decoration: underline;
+    text-underline-offset: 3px;
+    text-decoration-color: rgba(255, 255, 255, 0.2);
+    transition: color 0.2s ease, text-decoration-color 0.2s ease, opacity 0.2s ease;
+}
+
+.footer-link:hover {
+    color: var(--text-main);
+    text-decoration-color: var(--text-main);
+}
+
+.footer-icon {
+    width: 16px;
+    height: 16px;
+    object-fit: contain;
+    filter: brightness(0) invert(0.9);
+    transition: transform 0.2s ease, filter 0.2s ease;
+}
+
+.footer-link:hover .footer-icon {
+    transform: scale(1.15);
+    filter: brightness(0) invert(1);
 }
