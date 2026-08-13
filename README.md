@@ -29,8 +29,8 @@ If you just want to download a video, follow these steps:
 
 #### macOS (using Homebrew)
 
+Install Homebrew first if you don't have it: https://brew.sh
 ```bash
-# Install Homebrew first if you don't have it: https://brew.sh
 brew install yt-dlp ffmpeg node
 ```
 
