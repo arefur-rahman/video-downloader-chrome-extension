@@ -7,7 +7,7 @@ Everything runs **locally on your machine**. No cloud uploads, no third-party do
 **Repository:** [youtube-downloader-chrome-extension v3.0.0](https://github.com/arefur-rahman/youtube-downloader-chrome-extension/releases/tag/v3.0.0)
 
 <a href="https://chabondhu.com/aref">
-  <img src="https://img.shields.io/badge/☕-BuyMeACha-orange" alt="BuyMeACha" height="32">
+  <img src="https://img.shields.io/badge/☕-BuyMeACha-orange" alt="BuyMeACha" height="40">
 </a>
 
 ---
@@ -237,7 +237,7 @@ Only download content you have the **right to download**. Respect copyright laws
 Developed by **LOS** — [Portfolio](https://arefolio.vercel.app/) · [GitHub](https://github.com/arefur-rahman)
 
 <a href="https://chabondhu.com/aref">
-  <img src="https://img.shields.io/badge/☕-BuyMeACha-orange" alt="BuyMeACha" height="32">
+  <img src="https://img.shields.io/badge/☕-BuyMeACha-orange" alt="BuyMeACha" height="40">
 </a>
 
 ---
