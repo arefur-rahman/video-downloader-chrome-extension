@@ -1,7 +1,7 @@
 {
     "manifest_version": 3,
     "name": "Universal Video Downloader",
-    "version": "2.0.0",
+    "version": "3.0.0",
     "description": "Download videos & audio from YouTube, TikTok, Facebook, Instagram, Twitter/X, Vimeo & more locally using yt-dlp.",
     "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA6leC8a6q5N0+h2rzeAJC/fHLGCXSD1yi4CEGmnrYwq3QzATSOiDSChtxYzEjYHCLwpBJbEna68akLiTjjJ9Yb47YNci/k0g46YPzDaJqQr0KSdspDjz35+CSOtavokw8ZJVC/YzH9fCGDultuxqEfxnQfhU1hOAUBDHy/UKR2cqdlUyyfC0ctJvW6OiJIzrirb910PeU0GxV0qqBBIbrvJaGu96Ck3xGjUtP7aQoggaxCHeM+p3yx9DV1eRUiTyN1cAi9Fk9r3MpYnVNY5rniUwjgvg+H1MtDuJecRfuEbQT6QTfTA5wLkEGimvL5zcTr0CbQtouje8+8b99Pk9f6QIDAQAB",
     "permissions": [
@@ -19,7 +19,7 @@
         "128": "icons/icon-128.png"
     },
     "action": {
-        "default_popup": "popup.html",
+        "default_popup": "index.html",
         "default_title": "Universal Video Downloader",
         "default_icon": {
             "16": "icons/icon-16.png",
