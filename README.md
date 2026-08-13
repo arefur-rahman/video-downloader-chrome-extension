@@ -120,7 +120,7 @@ While a download is running, the popup shows progress. You can cancel from there
 | TikTok | ✅ | ✅ |
 | Twitter / X | ✅ | ✅ |
 
-<sub>I tried on some 18+ website unfortunately it works.</sub>
+<sub>I tried on some 18+ website but unfortunately it works🥲.</sub>
 
 ---
 
