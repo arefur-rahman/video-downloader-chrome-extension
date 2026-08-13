@@ -116,9 +116,9 @@ While a download is running, the popup shows progress. You can cancel from there
 |---|---|---|
 | YouTube | ✅ | ✅ |
 | Facebook | ✅ | ✅ |
-| Instagram | ✅ | ✅ |
-| TikTok | ✅ | ✅ |
-| Twitter / X | ✅ | ✅ |
+| Instagram | NOT TESTED YET | NOT TESTED YET 
+| TikTok | NOT TESTED YET | NOT TESTED YET 
+| Twitter | NOT TESTED YET | NOT TESTED YET 
 
 <sub>I tried on some 18+ website but unfortunately it works🥲.</sub>
 
