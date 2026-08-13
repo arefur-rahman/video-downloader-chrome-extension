@@ -161,9 +161,15 @@ While a download is running, the popup shows progress. You can cancel from there
 - Refresh the video page and open the popup again.
 - Some sites (especially Facebook) take a few seconds to load format info.
 - Update yt-dlp to the latest version:
+
+# Mac OS
   ```bash
-  brew upgrade yt-dlp        # macOS
-  yt-dlp -U                  # other platforms
+  brew upgrade yt-dlp
+  ```
+
+# other platforms
+  ```bash
+  yt-dlp -U
   ```
 
 ### Native host not found (macOS)
