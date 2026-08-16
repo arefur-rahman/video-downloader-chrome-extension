@@ -1,4 +1,13 @@
-import { Coffee, Download, Film, Globe, Loader2, Music, X } from "lucide-react";
+import {
+    Coffee,
+    Download,
+    Film,
+    Globe,
+    Loader2,
+    Music,
+    RotateCw,
+    X,
+} from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type {
     ActiveDownloadState,
@@ -24,6 +33,7 @@ export default function App() {
     const [selectedQuality, setSelectedQuality] = useState<string>("");
     const [availableHeights, setAvailableHeights] = useState<number[]>([]);
     const [isLoadingMediaInfo, setIsLoadingMediaInfo] = useState<boolean>(true);
+    const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
 
     const [downloadMode, setDownloadMode] = useState<"auto" | "mute">("auto");
     const [selectedFormat, setSelectedFormat] = useState<string>("mp3");
@@ -112,14 +122,14 @@ export default function App() {
             });
             if (res && res.online) {
                 setServerOnline(true);
-                setEngineName(res.engine || "Engine Ready");
+                setEngineName("yt-dlp");
             } else {
                 setServerOnline(false);
-                setEngineName("Engine Offline");
+                setEngineName("Offline");
             }
         } catch {
             setServerOnline(false);
-            setEngineName("Engine Offline");
+            setEngineName("Offline");
         }
     }, []);
 
@@ -252,6 +262,21 @@ export default function App() {
             setIsLoadingMediaInfo(false);
         }
     }, [applyMediaInfo, detectPlatformFromUrl, showError]);
+
+    const handleRefresh = useCallback(async () => {
+        setIsRefreshing(true);
+        setErrorMsg(null);
+        setSuccessMsg(null);
+        try {
+            await Promise.all([
+                checkServerStatus(),
+                initActiveTab(),
+                syncDownloadSessionState(),
+            ]);
+        } finally {
+            setIsRefreshing(false);
+        }
+    }, [checkServerStatus, initActiveTab, syncDownloadSessionState]);
 
     // Initial load: sync download session, check server, query active tab
     useEffect(() => {
@@ -416,17 +441,34 @@ export default function App() {
                         Video Downloader
                     </span>
                 </div>
-                <div className="flex items-center gap-1.5 text-xs text-slate-400 bg-slate-900/90 px-2.5 py-1 rounded-full border border-slate-800">
-                    <span
-                        className={`w-2 h-2 rounded-full ${
-                            serverOnline
-                                ? "bg-emerald-500 shadow-[0_0_6px_#10b981]"
-                                : "bg-rose-500 shadow-[0_0_6px_#ef4444]"
-                        }`}
-                    />
-                    <span className="font-medium text-[11px]">
-                        {engineName}
-                    </span>
+                <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-1.5 text-xs text-slate-400 bg-slate-900/90 px-2.5 py-1 rounded-full border border-slate-800 whitespace-nowrap">
+                        <span
+                            className={`w-2 h-2 rounded-full ${
+                                serverOnline
+                                    ? "bg-emerald-500 shadow-[0_0_6px_#10b981]"
+                                    : "bg-rose-500 shadow-[0_0_6px_#ef4444]"
+                            }`}
+                        />
+                        <span className="font-medium text-[11px]">
+                            {engineName}
+                        </span>
+                    </div>
+                    <button
+                        onClick={handleRefresh}
+                        disabled={isRefreshing || isDownloading}
+                        className="p-1.5 rounded-full bg-slate-900/90 hover:bg-slate-800 text-slate-400 hover:text-white border border-slate-800 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed group"
+                        title="Reload Information"
+                        aria-label="Reload Information"
+                    >
+                        <RotateCw
+                            className={`w-3.5 h-3.5 ${
+                                isRefreshing || isLoadingMediaInfo
+                                    ? "animate-spin text-indigo-400"
+                                    : "group-hover:rotate-45 transition-transform"
+                            }`}
+                        />
+                    </button>
                 </div>
             </header>
 
@@ -466,140 +508,167 @@ export default function App() {
 
             {/* Navigation Tabs + Controls — hidden while downloading */}
             {!isDownloading && (
-            <>
-            <nav className="flex bg-slate-950/80 p-1 rounded-xl border border-slate-800/80 mb-3">
-                <button
-                    className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
-                        activeMode === "video"
-                            ? "bg-slate-800/90 text-white shadow-xs border border-slate-700/80"
-                            : "text-slate-400 hover:text-white"
-                    }`}
-                    onClick={() => handleModeSwitch("video")}
-                >
-                    <Film className="w-3.5 h-3.5" /> Video
-                </button>
-                <button
-                    className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
-                        activeMode === "audio"
-                            ? "bg-slate-800/90 text-white shadow-xs border border-slate-700/80"
-                            : "text-slate-400 hover:text-white"
-                    }`}
-                    onClick={() => handleModeSwitch("audio")}
-                >
-                    <Music className="w-3.5 h-3.5" /> Audio
-                </button>
-            </nav>
+                <>
+                    <nav className="flex bg-slate-950/80 p-1 rounded-xl border border-slate-800/80 mb-3">
+                        <button
+                            className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                                activeMode === "video"
+                                    ? "bg-slate-800/90 text-white shadow-xs border border-slate-700/80"
+                                    : "text-slate-400 hover:text-white"
+                            }`}
+                            onClick={() => handleModeSwitch("video")}
+                        >
+                            <Film className="w-3.5 h-3.5" /> Video
+                        </button>
+                        <button
+                            className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                                activeMode === "audio"
+                                    ? "bg-slate-800/90 text-white shadow-xs border border-slate-700/80"
+                                    : "text-slate-400 hover:text-white"
+                            }`}
+                            onClick={() => handleModeSwitch("audio")}
+                        >
+                            <Music className="w-3.5 h-3.5" /> Audio
+                        </button>
+                    </nav>
 
-            {/* Tab Panel: Video */}
-            {activeMode === "video" && (
-                <div>
-                    <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">
-                        Select Resolution
-                    </div>
-                    <div className="grid grid-cols-3 gap-2 mb-3">
-                        {isLoadingMediaInfo ? (
-                            Array.from({ length: 6 }).map((_, index) => (
-                                <div
-                                    key={index}
-                                    className="py-2.5 px-2 rounded-xl border border-slate-800 bg-slate-900/60 animate-pulse"
-                                >
-                                    <div className="h-4 bg-slate-800 rounded-md" />
-                                </div>
-                            ))
-                        ) : availableHeights.length > 0 ? (
-                            availableHeights.map((h) => (
-                                <button
-                                    key={h}
-                                    className={`relative py-2.5 px-2 rounded-xl text-xs font-bold transition-all border text-center cursor-pointer ${
-                                        selectedQuality === String(h)
-                                            ? "bg-indigo-600/30 border-indigo-500 text-white shadow-[0_0_12px_rgba(99,102,241,0.3)]"
-                                            : "bg-slate-900/60 border-slate-800 text-slate-400 hover:border-slate-700 hover:text-white"
-                                    }`}
-                                    onClick={() =>
-                                        setSelectedQuality(String(h))
-                                    }
-                                >
-                                    {h}p
-                                    {h >= 2160 && (
-                                        <span className="absolute top-1 right-1 text-[8px] font-black bg-linear-to-r from-indigo-500 to-pink-500 text-white px-1 py-0.5 rounded-sm shadow-xs">
-                                            4K
-                                        </span>
-                                    )}
-                                    {h === 1080 && (
-                                        <span className="absolute top-1 right-1 text-[8px] font-black bg-linear-to-r from-indigo-500 to-pink-500 text-white px-1 py-0.5 rounded-sm shadow-xs">
-                                            HD
-                                        </span>
-                                    )}
-                                </button>
-                            ))
-                        ) : (
-                            <div className="col-span-3 py-3 px-3 rounded-xl border border-slate-800 bg-slate-900/60 text-[11px] text-slate-400 text-center">
-                                No video formats detected for this page.
+                    {/* Tab Panel: Video */}
+                    {activeMode === "video" && (
+                        <div>
+                            <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">
+                                Select Resolution
                             </div>
-                        )}
-                    </div>
+                            <div className="grid grid-cols-3 gap-2 mb-3">
+                                {isLoadingMediaInfo ? (
+                                    Array.from({ length: 6 }).map(
+                                        (_, index) => (
+                                            <div
+                                                key={index}
+                                                className="py-2.5 px-2 rounded-xl border border-slate-800 bg-slate-900/60 animate-pulse"
+                                            >
+                                                <div className="h-4 bg-slate-800 rounded-md" />
+                                            </div>
+                                        ),
+                                    )
+                                ) : availableHeights.length > 0 ? (
+                                    availableHeights.map((h) => (
+                                        <button
+                                            key={h}
+                                            className={`relative py-2.5 px-2 rounded-xl text-xs font-bold transition-all border text-center cursor-pointer ${
+                                                selectedQuality === String(h)
+                                                    ? "bg-indigo-600/30 border-indigo-500 text-white shadow-[0_0_12px_rgba(99,102,241,0.3)]"
+                                                    : "bg-slate-900/60 border-slate-800 text-slate-400 hover:border-slate-700 hover:text-white"
+                                            }`}
+                                            onClick={() =>
+                                                setSelectedQuality(String(h))
+                                            }
+                                        >
+                                            {h}p
+                                            {h >= 2160 && (
+                                                <span className="absolute top-1 right-1 text-[8px] font-black bg-linear-to-r from-indigo-500 to-pink-500 text-white px-1 py-0.5 rounded-sm shadow-xs">
+                                                    4K
+                                                </span>
+                                            )}
+                                            {h === 1080 && (
+                                                <span className="absolute top-1 right-1 text-[8px] font-black bg-linear-to-r from-indigo-500 to-pink-500 text-white px-1 py-0.5 rounded-sm shadow-xs">
+                                                    HD
+                                                </span>
+                                            )}
+                                        </button>
+                                    ))
+                                ) : (
+                                    <div className="col-span-3 py-3 px-3 rounded-xl border border-slate-800 bg-slate-900/60 text-[11px] text-slate-400 text-center flex flex-col items-center gap-1.5">
+                                        <span>
+                                            No video formats detected for this
+                                            page.
+                                        </span>
+                                        <button
+                                            onClick={handleRefresh}
+                                            disabled={
+                                                isRefreshing || isDownloading
+                                            }
+                                            className="text-indigo-400 hover:text-indigo-300 font-semibold flex items-center gap-1 cursor-pointer disabled:opacity-50"
+                                        >
+                                            <RotateCw
+                                                className={`w-3 h-3 ${isRefreshing || isLoadingMediaInfo ? "animate-spin" : ""}`}
+                                            />{" "}
+                                            Reload Info
+                                        </button>
+                                    </div>
+                                )}
+                            </div>
 
-                    <div className="mb-3.5">
-                        <label className="block text-[11px] text-slate-400 mb-1 font-bold">
-                            Download Mode
-                        </label>
-                        <select
-                            value={downloadMode}
-                            onChange={(e) =>
-                                setDownloadMode(
-                                    e.target.value as "auto" | "mute",
-                                )
-                            }
-                            className="w-full bg-slate-900/90 border border-slate-800 text-white px-3 py-2 rounded-xl text-xs outline-none focus:border-indigo-500 transition-all cursor-pointer"
-                        >
-                            <option value="auto">
-                                Video + Audio (Standard)
-                            </option>
-                            <option value="mute">Mute (Video Only)</option>
-                        </select>
-                    </div>
-                </div>
-            )}
+                            <div className="mb-3.5">
+                                <label className="block text-[11px] text-slate-400 mb-1 font-bold">
+                                    Download Mode
+                                </label>
+                                <select
+                                    value={downloadMode}
+                                    onChange={(e) =>
+                                        setDownloadMode(
+                                            e.target.value as "auto" | "mute",
+                                        )
+                                    }
+                                    className="w-full bg-slate-900/90 border border-slate-800 text-white px-3 py-2 rounded-xl text-xs outline-none focus:border-indigo-500 transition-all cursor-pointer"
+                                >
+                                    <option value="auto">
+                                        Video + Audio (Standard)
+                                    </option>
+                                    <option value="mute">
+                                        Mute (Video Only)
+                                    </option>
+                                </select>
+                            </div>
+                        </div>
+                    )}
 
-            {/* Tab Panel: Audio */}
-            {activeMode === "audio" && (
-                <div>
-                    <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">
-                        Audio Format
-                    </div>
-                    <div className="grid grid-cols-4 gap-2 mb-3">
-                        {["mp3", "wav", "opus", "ogg"].map((fmt) => (
-                            <button
-                                key={fmt}
-                                className={`py-2.5 px-2 rounded-xl text-xs font-bold uppercase transition-all border text-center cursor-pointer ${
-                                    selectedFormat === fmt
-                                        ? "bg-indigo-600/30 border-indigo-500 text-white shadow-[0_0_12px_rgba(99,102,241,0.3)]"
-                                        : "bg-slate-900/60 border-slate-800 text-slate-400 hover:border-slate-700 hover:text-white"
-                                }`}
-                                onClick={() => setSelectedFormat(fmt)}
-                            >
-                                {fmt}
-                            </button>
-                        ))}
-                    </div>
+                    {/* Tab Panel: Audio */}
+                    {activeMode === "audio" && (
+                        <div>
+                            <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">
+                                Audio Format
+                            </div>
+                            <div className="grid grid-cols-4 gap-2 mb-3">
+                                {["mp3", "wav", "opus", "ogg"].map((fmt) => (
+                                    <button
+                                        key={fmt}
+                                        className={`py-2.5 px-2 rounded-xl text-xs font-bold uppercase transition-all border text-center cursor-pointer ${
+                                            selectedFormat === fmt
+                                                ? "bg-indigo-600/30 border-indigo-500 text-white shadow-[0_0_12px_rgba(99,102,241,0.3)]"
+                                                : "bg-slate-900/60 border-slate-800 text-slate-400 hover:border-slate-700 hover:text-white"
+                                        }`}
+                                        onClick={() => setSelectedFormat(fmt)}
+                                    >
+                                        {fmt}
+                                    </button>
+                                ))}
+                            </div>
 
-                    <div className="mb-3.5">
-                        <label className="block text-[11px] text-slate-400 mb-1 font-bold">
-                            Audio Bitrate
-                        </label>
-                        <select
-                            value={selectedBitrate}
-                            onChange={(e) => setSelectedBitrate(e.target.value)}
-                            className="w-full bg-slate-900/90 border border-slate-800 text-white px-3 py-2 rounded-xl text-xs outline-none focus:border-indigo-500 transition-all cursor-pointer"
-                        >
-                            <option value="320">320 kbps (High Quality)</option>
-                            <option value="128">128 kbps (Standard)</option>
-                            <option value="64">64 kbps (Compact)</option>
-                        </select>
-                    </div>
-                </div>
-            )}
-            </>
+                            <div className="mb-3.5">
+                                <label className="block text-[11px] text-slate-400 mb-1 font-bold">
+                                    Audio Bitrate
+                                </label>
+                                <select
+                                    value={selectedBitrate}
+                                    onChange={(e) =>
+                                        setSelectedBitrate(e.target.value)
+                                    }
+                                    className="w-full bg-slate-900/90 border border-slate-800 text-white px-3 py-2 rounded-xl text-xs outline-none focus:border-indigo-500 transition-all cursor-pointer"
+                                >
+                                    <option value="320">
+                                        320 kbps (High Quality)
+                                    </option>
+                                    <option value="128">
+                                        128 kbps (Standard)
+                                    </option>
+                                    <option value="64">
+                                        64 kbps (Compact)
+                                    </option>
+                                </select>
+                            </div>
+                        </div>
+                    )}
+                </>
             )}
 
             {/* Live Progress Box */}

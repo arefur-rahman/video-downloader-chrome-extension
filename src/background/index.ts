@@ -11,7 +11,7 @@ import {
     type MediaInfoCache,
     mergeMediaInfo,
     normalizeMediaUrl,
-} from "../utils/media";
+} from "./mediaCache";
 
 const NATIVE_HOST_NAME = "com.videodownloader.yt_dlp";
 const FALLBACK_LOCAL_SERVER_URL = "http://127.0.0.1:9000/";
@@ -306,7 +306,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
             sendResponse({
                 success: true,
                 online: true,
-                engine: "yt-dlp (Native On-Demand)",
+                engine: "yt-dlp",
             });
         })();
         return true;
