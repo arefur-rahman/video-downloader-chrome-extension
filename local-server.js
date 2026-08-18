@@ -16,6 +16,20 @@ const YTDLP_BIN = fs.existsSync("/opt/homebrew/bin/yt-dlp")
     ? "/opt/homebrew/bin/yt-dlp"
     : "yt-dlp";
 
+const YTDLP_RELIABILITY_ARGS = [
+    "--retries",
+    "10",
+    "--fragment-retries",
+    "15",
+    "--extractor-retries",
+    "3",
+    "--retry-sleep",
+    "linear=1::2",
+    "--socket-timeout",
+    "30",
+    "--no-abort-on-error",
+];
+
 if (!fs.existsSync(DOWNLOADS_DIR)) {
     fs.mkdirSync(DOWNLOADS_DIR, { recursive: true });
 }
@@ -124,7 +138,6 @@ const server = http.createServer((req, res) => {
             } catch (e) {}
 
             let targetUrl = payload.url;
-            const directUrl = payload.directUrl;
 
             if (!targetUrl || typeof targetUrl !== "string") {
                 res.writeHead(400, { "Content-Type": "application/json" });
@@ -141,16 +154,6 @@ const server = http.createServer((req, res) => {
                 targetUrl.includes("facebook.com") ||
                 targetUrl.includes("fb.watch") ||
                 targetUrl.includes("fbcdn.net");
-            const isDirectVideo =
-                directUrl &&
-                typeof directUrl === "string" &&
-                directUrl.startsWith("http") &&
-                !/\.(jpg|jpeg|png|webp|gif)($|\?)/i.test(directUrl) &&
-                !directUrl.includes("dst-jpg");
-
-            if (isFacebook && isDirectVideo) {
-                targetUrl = directUrl;
-            }
 
             const downloadMode = payload.downloadMode || "auto";
             const height = payload.videoQuality || "1080";
@@ -165,7 +168,7 @@ const server = http.createServer((req, res) => {
                 `${fileId}_%(title)s_${resLabel}.%(ext)s`,
             );
 
-            let args = [];
+            let args = [...YTDLP_RELIABILITY_ARGS];
             if (isFacebook) {
                 args.push(
                     "--user-agent",

@@ -95,6 +95,44 @@ function sanitizeFilename(name: string): string {
         .slice(0, 120);
 }
 
+function isNativeConnectionError(err: Error & { code?: string }): boolean {
+    if (err.code === "NATIVE_DISCONNECTED") return true;
+    if (err.code === "NATIVE_ERROR" || err.code === "CANCELLED") return false;
+
+    const msg = (err.message || "").toLowerCase();
+    return (
+        msg.includes("native messaging") ||
+        msg.includes("native host") ||
+        msg.includes("specified native") ||
+        msg.includes("native messaging host not found") ||
+        msg.includes("error when communicating with the native")
+    );
+}
+
+function isYtdlpExecutionError(err: Error & { code?: string }): boolean {
+    if (err.code === "NATIVE_ERROR") return true;
+
+    const msg = err.message || "";
+    return (
+        msg.includes("ERROR:") ||
+        msg.includes("yt-dlp") ||
+        msg.includes("bytes read") ||
+        msg.includes("Giving up after") ||
+        msg.includes("Unable to download")
+    );
+}
+
+function formatDownloadErrorMessage(message: string): string {
+    const cleaned = message.replace(/^ERROR:\s*/i, "").trim();
+    if (
+        cleaned.includes("bytes read") &&
+        cleaned.includes("expected")
+    ) {
+        return "Download link expired or became unstable. Refresh the video page, wait a few seconds, then try again.";
+    }
+    return cleaned || "Download failed.";
+}
+
 let activeNativePort: chrome.runtime.Port | null = null;
 const mediaInfoPrefetchInFlight = new Set<string>();
 
@@ -291,9 +329,10 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                 console.error("[ServiceWorker] Download error:", errorObj);
                 sendResponse({
                     success: false,
-                    error:
+                    error: formatDownloadErrorMessage(
                         errorObj.message ||
-                        "Failed to process download request.",
+                            "Failed to process download request.",
+                    ),
                     code: errorObj.code || "UNKNOWN_ERROR",
                 });
             }
@@ -414,8 +453,16 @@ async function processDownloadRequest(
         } catch (nativeErr: unknown) {
             const nErr = nativeErr as Error & { code?: string };
             if (nErr.code === "CANCELLED") throw nErr;
+
+            if (
+                isYtdlpExecutionError(nErr) ||
+                !isNativeConnectionError(nErr)
+            ) {
+                throw nErr;
+            }
+
             console.warn(
-                "[ServiceWorker] Native messaging port fallback:",
+                "[ServiceWorker] Native host unavailable, trying fallback:",
                 nErr.message,
             );
 
@@ -524,7 +571,7 @@ async function processDownloadRequest(
         await chrome.storage.session.set({
             activeDownload: {
                 status: "error",
-                error: errorObj.message,
+                error: formatDownloadErrorMessage(errorObj.message),
                 code: errorObj.code || "DOWNLOAD_FAILED",
                 timestamp: Date.now(),
             } as ActiveDownloadState,
@@ -555,11 +602,37 @@ function executeNativePortDownload(payload: unknown): Promise<{
 }> {
     return new Promise((resolve, reject) => {
         if (!chrome.runtime.connectNative) {
-            return reject(new Error("Native messaging API unavailable."));
+            const err = new Error(
+                "Native messaging API unavailable.",
+            ) as Error & { code?: string };
+            err.code = "NATIVE_DISCONNECTED";
+            return reject(err);
         }
 
         const port = chrome.runtime.connectNative(NATIVE_HOST_NAME);
         activeNativePort = port;
+        let settled = false;
+
+        const finish = (
+            handler: "resolve" | "reject",
+            value: unknown,
+        ) => {
+            if (settled) return;
+            settled = true;
+            activeNativePort = null;
+            if (handler === "resolve") {
+                resolve(
+                    value as {
+                        status: string;
+                        filename: string;
+                        filepath?: string;
+                        text?: string;
+                    },
+                );
+            } else {
+                reject(value);
+            }
+        };
 
         port.onMessage.addListener(async (msg: NativeDownloadProgress) => {
             if (msg.status === "progress") {
@@ -581,37 +654,42 @@ function executeNativePortDownload(payload: unknown): Promise<{
                     color: "#F59E0B",
                 });
             } else if (msg.status === "success") {
-                activeNativePort = null;
-                resolve({
+                finish("resolve", {
                     status: "success",
                     filename: msg.filename || "download",
                     filepath: msg.filepath,
                 });
             } else if (msg.status === "cancelled") {
-                activeNativePort = null;
                 const err = new Error(
                     "Download cancelled by user.",
                 ) as Error & { code?: string };
                 err.code = "CANCELLED";
-                reject(err);
+                finish("reject", err);
             } else if (msg.status === "error") {
-                activeNativePort = null;
                 const err = new Error(
                     msg.text || "Native host error.",
                 ) as Error & { code?: string };
                 err.code = "NATIVE_ERROR";
-                reject(err);
+                finish("reject", err);
             }
         });
 
         port.onDisconnect.addListener(() => {
-            activeNativePort = null;
-            if (chrome.runtime.lastError) {
-                console.warn(
-                    "[ServiceWorker] Native port disconnected:",
-                    chrome.runtime.lastError.message,
-                );
-            }
+            if (settled) return;
+
+            const disconnectMessage =
+                chrome.runtime.lastError?.message ||
+                "Native host disconnected unexpectedly.";
+            console.warn(
+                "[ServiceWorker] Native port disconnected:",
+                disconnectMessage,
+            );
+
+            const err = new Error(disconnectMessage) as Error & {
+                code?: string;
+            };
+            err.code = "NATIVE_DISCONNECTED";
+            finish("reject", err);
         });
 
         port.postMessage(payload);

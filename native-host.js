@@ -13,6 +13,23 @@ const YTDLP_BIN = fs.existsSync("/opt/homebrew/bin/yt-dlp")
     ? "/opt/homebrew/bin/yt-dlp"
     : "yt-dlp";
 
+const YTDLP_RELIABILITY_ARGS = [
+    "--retries",
+    "10",
+    "--fragment-retries",
+    "15",
+    "--extractor-retries",
+    "3",
+    "--retry-sleep",
+    "linear=1::2",
+    "--socket-timeout",
+    "30",
+    "--no-abort-on-error",
+];
+
+const FACEBOOK_UA =
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
+
 let activeChildProcess = null;
 let activeFileId = null;
 
@@ -80,6 +97,194 @@ function sendNativeMessage(msgObj) {
     } catch (e) {
         console.error("Error sending native message:", e);
     }
+}
+
+function isDirectVideoUrl(url) {
+    return (
+        url &&
+        typeof url === "string" &&
+        url.startsWith("http") &&
+        !/\.(jpg|jpeg|png|webp|gif)($|\?)/i.test(url) &&
+        !url.includes("dst-jpg") &&
+        !url.includes("dst-png")
+    );
+}
+
+function isRetryableYtdlpError(text) {
+    if (!text) return false;
+    const lower = text.toLowerCase();
+    return (
+        lower.includes("bytes read") ||
+        lower.includes("giving up after") ||
+        lower.includes("unable to download") ||
+        lower.includes("http error 403") ||
+        lower.includes("http error 416") ||
+        lower.includes("connection reset") ||
+        lower.includes("timed out") ||
+        lower.includes("network is unreachable") ||
+        lower.includes("ssl:") ||
+        lower.includes("urlopen error")
+    );
+}
+
+function buildDownloadArgs({
+    targetUrl,
+    downloadMode,
+    height,
+    audioFormat,
+    audioBitrate,
+    resLabel,
+    fileId,
+    isFacebook,
+}) {
+    const outTemplate = path.join(
+        DOWNLOADS_DIR,
+        `${fileId}_%(title)s_${resLabel}.%(ext)s`,
+    );
+
+    const args = ["--newline", ...YTDLP_RELIABILITY_ARGS];
+
+    if (isFacebook) {
+        args.push(
+            "--user-agent",
+            FACEBOOK_UA,
+            "--referer",
+            "https://www.facebook.com/",
+        );
+    }
+
+    if (downloadMode === "audio") {
+        args.push(
+            "-f",
+            "bestaudio/best",
+            "-x",
+            "--audio-format",
+            audioFormat,
+            "--audio-quality",
+            `${audioBitrate}K`,
+            "-o",
+            outTemplate,
+            "--no-playlist",
+            targetUrl,
+        );
+    } else if (downloadMode === "mute") {
+        args.push(
+            "-f",
+            `bestvideo[height<=${height}]/best[height<=${height}]/b`,
+            "-o",
+            outTemplate,
+            "--no-playlist",
+            targetUrl,
+        );
+    } else {
+        args.push(
+            "-f",
+            `bestvideo[height<=${height}]+bestaudio/best[height<=${height}]/best/b`,
+            "--merge-output-format",
+            "mp4",
+            "-o",
+            outTemplate,
+            "--no-playlist",
+            targetUrl,
+        );
+    }
+
+    return args;
+}
+
+function sleep(ms) {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function runYtdlpDownload(args, fileId, resLabel, onProgress) {
+    return new Promise((resolve, reject) => {
+        const child = spawn(YTDLP_BIN, args);
+        activeChildProcess = child;
+
+        let lastPercent = 0;
+        let stderrText = "";
+
+        child.stdout.on("data", (chunk) => {
+            const text = chunk.toString("utf8");
+            const lines = text.split(/\r?\n/);
+
+            lines.forEach((line) => {
+                const pctMatch = line.match(/\[download\]\s+([\d\.]+)%/);
+                if (pctMatch) {
+                    const percent = Math.min(
+                        99,
+                        Math.floor(parseFloat(pctMatch[1])),
+                    );
+                    if (percent !== lastPercent) {
+                        lastPercent = percent;
+                        onProgress(percent);
+                    }
+                } else if (line.includes("[Merger]")) {
+                    onProgress(98, "Merging video & audio streams...");
+                }
+            });
+        });
+
+        child.stderr.on("data", (chunk) => {
+            stderrText += chunk.toString("utf8");
+        });
+
+        child.on("close", (code) => {
+            activeChildProcess = null;
+            if (code !== 0) {
+                const lastErrLine = stderrText
+                    .trim()
+                    .split(/\r?\n/)
+                    .filter((l) => l.includes("ERROR:") || l.trim())
+                    .pop();
+                const errDetail =
+                    lastErrLine || `yt-dlp process exited with code ${code}`;
+                const err = new Error(errDetail);
+                err.retryable = isRetryableYtdlpError(errDetail);
+                reject(err);
+                return;
+            }
+
+            const files = fs
+                .readdirSync(DOWNLOADS_DIR)
+                .filter((f) => f.startsWith(fileId));
+            if (files.length === 0) {
+                reject(new Error("Downloaded file not found on disk."));
+                return;
+            }
+
+            resolve({ rawFile: files[0], resLabel });
+        });
+    });
+}
+
+function finalizeDownload(rawFile, fileId, resLabel) {
+    const ext = path.extname(rawFile) || ".mp4";
+
+    let extractedTitle = rawFile.slice(fileId.length + 1);
+    const suffix = `_${resLabel}${ext}`;
+    if (extractedTitle.endsWith(suffix)) {
+        extractedTitle = extractedTitle.slice(0, -suffix.length);
+    } else if (extractedTitle.endsWith(ext)) {
+        extractedTitle = extractedTitle.slice(0, -ext.length);
+    }
+
+    let finalName;
+    if (!isGenericTitle(extractedTitle)) {
+        const cleanTitle = sanitizeFilename(extractedTitle);
+        finalName = `${cleanTitle}_${resLabel}${ext}`;
+    } else {
+        finalName = `${getFormattedTimestamp()}_${resLabel}${ext}`;
+    }
+
+    const rawPath = path.join(DOWNLOADS_DIR, rawFile);
+    const finalPath = path.join(DOWNLOADS_DIR, finalName);
+
+    try {
+        fs.renameSync(rawPath, finalPath);
+    } catch (e) {}
+
+    return { finalName, finalPath };
 }
 
 function cleanupTempFiles(fileId) {
@@ -190,30 +395,30 @@ listenNativeMessages((payload) => {
     }
 
     // Handle Download Execution
-    let targetUrl = payload.url;
+    if (payload.action !== "download") {
+        sendNativeMessage({
+            status: "error",
+            text: `Unknown action: ${payload.action || "none"}`,
+        });
+        return;
+    }
+
+    void handleDownloadRequest(payload);
+});
+
+async function handleDownloadRequest(payload) {
+    const pageUrl = payload.url;
     const directUrl = payload.directUrl;
 
-    if (!targetUrl || typeof targetUrl !== "string") {
+    if (!pageUrl || typeof pageUrl !== "string") {
         sendNativeMessage({ status: "error", text: "Missing target URL" });
         return;
     }
 
     const isFacebook =
-        targetUrl.includes("facebook.com") ||
-        targetUrl.includes("fb.watch") ||
-        targetUrl.includes("fbcdn.net");
-
-    // If Facebook page URL is passed and we have a direct video stream URL from DOM, use directUrl (ignoring images)
-    const isDirectVideo =
-        directUrl &&
-        typeof directUrl === "string" &&
-        directUrl.startsWith("http") &&
-        !/\.(jpg|jpeg|png|webp|gif)($|\?)/i.test(directUrl) &&
-        !directUrl.includes("dst-jpg");
-
-    if (isFacebook && isDirectVideo) {
-        targetUrl = directUrl;
-    }
+        pageUrl.includes("facebook.com") ||
+        pageUrl.includes("fb.watch") ||
+        pageUrl.includes("fbcdn.net");
 
     const downloadMode = payload.downloadMode || "auto";
     const height = payload.videoQuality || "1080";
@@ -225,158 +430,86 @@ listenNativeMessages((payload) => {
     const fileId = Date.now().toString(36);
     activeFileId = fileId;
 
-    const outTemplate = path.join(
-        DOWNLOADS_DIR,
-        `${fileId}_%(title)s_${resLabel}.%(ext)s`,
-    );
-
-    let args = ["--newline"];
-
-    if (isFacebook) {
-        args.push(
-            "--user-agent",
-            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-            "--referer",
-            "https://www.facebook.com/",
-        );
+    const downloadTargets = [pageUrl];
+    if (
+        isFacebook &&
+        isDirectVideoUrl(directUrl) &&
+        directUrl !== pageUrl
+    ) {
+        downloadTargets.push(directUrl);
     }
 
-    if (downloadMode === "audio") {
-        args.push(
-            "-f",
-            "bestaudio/best",
-            "-x",
-            "--audio-format",
-            audioFormat,
-            "--audio-quality",
-            `${audioBitrate}K`,
-            "-o",
-            outTemplate,
-            "--no-playlist",
-            targetUrl,
-        );
-    } else if (downloadMode === "mute") {
-        args.push(
-            "-f",
-            `bestvideo[height<=${height}]/best[height<=${height}]/b`,
-            "-o",
-            outTemplate,
-            "--no-playlist",
-            targetUrl,
-        );
-    } else {
-        args.push(
-            "-f",
-            `bestvideo[height<=${height}]+bestaudio/best[height<=${height}]/best/b`,
-            "--merge-output-format",
-            "mp4",
-            "-o",
-            outTemplate,
-            "--no-playlist",
-            targetUrl,
-        );
-    }
-
-    const child = spawn(YTDLP_BIN, args);
-    activeChildProcess = child;
-
-    let lastPercent = 0;
-
-    child.stdout.on("data", (chunk) => {
-        const text = chunk.toString("utf8");
-        const lines = text.split(/\r?\n/);
-
-        lines.forEach((line) => {
-            const pctMatch = line.match(/\[download\]\s+([\d\.]+)%/);
-            if (pctMatch) {
-                const percent = Math.min(
-                    99,
-                    Math.floor(parseFloat(pctMatch[1])),
-                );
-                if (percent !== lastPercent) {
-                    lastPercent = percent;
-                    sendNativeMessage({
-                        status: "progress",
-                        percent: percent,
-                        text: `Downloading... ${percent}%`,
-                    });
-                }
-            } else if (line.includes("[Merger]")) {
-                sendNativeMessage({
-                    status: "progress",
-                    percent: 98,
-                    text: "Merging video & audio streams...",
-                });
-            }
-        });
-    });
-
-    let stderrText = "";
-
-    child.stderr.on("data", (chunk) => {
-        const text = chunk.toString("utf8");
-        stderrText += text;
-        console.error("[yt-dlp stderr]", text);
-    });
-
-    child.on("close", (code) => {
-        activeChildProcess = null;
-        if (code !== 0) {
-            const lastErrLine = stderrText
-                .trim()
-                .split(/\r?\n/)
-                .filter((l) => l.includes("ERROR:") || l.trim())
-                .pop();
-            const errDetail =
-                lastErrLine || `yt-dlp process exited with code ${code}`;
-            sendNativeMessage({ status: "error", text: errDetail });
-            return;
-        }
-
-        const files = fs
-            .readdirSync(DOWNLOADS_DIR)
-            .filter((f) => f.startsWith(fileId));
-        if (files.length === 0) {
-            sendNativeMessage({
-                status: "error",
-                text: "Downloaded file not found on disk.",
-            });
-            return;
-        }
-
-        const rawFile = files[0];
-        const ext = path.extname(rawFile) || ".mp4";
-
-        let extractedTitle = rawFile.slice(fileId.length + 1);
-        const suffix = `_${resLabel}${ext}`;
-        if (extractedTitle.endsWith(suffix)) {
-            extractedTitle = extractedTitle.slice(0, -suffix.length);
-        } else if (extractedTitle.endsWith(ext)) {
-            extractedTitle = extractedTitle.slice(0, -ext.length);
-        }
-
-        let finalName;
-        if (!isGenericTitle(extractedTitle)) {
-            const cleanTitle = sanitizeFilename(extractedTitle);
-            finalName = `${cleanTitle}_${resLabel}${ext}`;
-        } else {
-            const timestamp = getFormattedTimestamp();
-            finalName = `${timestamp}_${resLabel}${ext}`;
-        }
-
-        const rawPath = path.join(DOWNLOADS_DIR, rawFile);
-        const finalPath = path.join(DOWNLOADS_DIR, finalName);
-
-        try {
-            fs.renameSync(rawPath, finalPath);
-        } catch (e) {}
-
+    const onProgress = (percent, text) => {
         sendNativeMessage({
-            status: "success",
-            filename: finalName,
-            filepath: finalPath,
+            status: "progress",
+            percent,
+            text: text || `Downloading... ${percent}%`,
         });
+    };
 
-        setTimeout(() => process.exit(0), 100);
+    let lastError = null;
+
+    for (let i = 0; i < downloadTargets.length; i++) {
+        const targetUrl = downloadTargets[i];
+        const maxAttempts = i === 0 ? 2 : 1;
+
+        for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+            if (attempt > 1) {
+                cleanupTempFiles(fileId);
+                await sleep(1500);
+                onProgress(0, "Retrying download...");
+            }
+
+            const args = buildDownloadArgs({
+                targetUrl,
+                downloadMode,
+                height,
+                audioFormat,
+                audioBitrate,
+                resLabel,
+                fileId,
+                isFacebook,
+            });
+
+            try {
+                const { rawFile } = await runYtdlpDownload(
+                    args,
+                    fileId,
+                    resLabel,
+                    onProgress,
+                );
+                const { finalName, finalPath } = finalizeDownload(
+                    rawFile,
+                    fileId,
+                    resLabel,
+                );
+
+                sendNativeMessage({
+                    status: "success",
+                    filename: finalName,
+                    filepath: finalPath,
+                });
+                setTimeout(() => process.exit(0), 100);
+                return;
+            } catch (err) {
+                lastError = err;
+                cleanupTempFiles(fileId);
+
+                const canRetrySameTarget =
+                    attempt < maxAttempts && err.retryable !== false;
+                if (canRetrySameTarget) continue;
+
+                const hasNextTarget = i < downloadTargets.length - 1;
+                if (hasNextTarget && err.retryable !== false) break;
+            }
+        }
+    }
+
+    sendNativeMessage({
+        status: "error",
+        text:
+            lastError?.message ||
+            "Download failed after multiple attempts.",
     });
-});
+    setTimeout(() => process.exit(0), 100);
+}
