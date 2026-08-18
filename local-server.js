@@ -157,9 +157,7 @@ const server = http.createServer((req, res) => {
             const audioFormat = payload.audioFormat || "mp3";
             const audioBitrate = payload.audioBitrate || "128";
             const resLabel =
-                downloadMode === "audio"
-                    ? audioFormat.toUpperCase()
-                    : `${height}p`;
+                downloadMode === "audio" ? `${audioBitrate}kbps` : `${height}p`;
 
             const fileId = Date.now().toString(36);
             const outTemplate = path.join(
