@@ -421,7 +421,9 @@ async function processDownloadRequest(
 
             // Fallback A: Direct video stream URL via Chrome Downloads API
             const direct = requestPayload.directUrl;
+            const mode = requestPayload.downloadMode || "auto";
             const isDirectVideo =
+                mode !== "audio" &&
                 direct &&
                 typeof direct === "string" &&
                 direct.startsWith("http") &&
@@ -436,11 +438,8 @@ async function processDownloadRequest(
                 );
                 try {
                     const height = requestPayload.videoQuality || "1080";
-                    const format = requestPayload.audioFormat || "mp3";
-                    const mode = requestPayload.downloadMode || "auto";
-                    const resLabel =
-                        mode === "audio" ? format.toUpperCase() : `${height}p`;
-                    const ext = mode === "audio" ? `.${format}` : ".mp4";
+                    const resLabel = `${height}p`;
+                    const ext = ".mp4";
 
                     let targetFilename: string;
                     if (!isGenericTitle(requestPayload.title)) {

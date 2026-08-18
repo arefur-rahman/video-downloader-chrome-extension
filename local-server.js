@@ -155,6 +155,7 @@ const server = http.createServer((req, res) => {
             const downloadMode = payload.downloadMode || "auto";
             const height = payload.videoQuality || "1080";
             const audioFormat = payload.audioFormat || "mp3";
+            const audioBitrate = payload.audioBitrate || "128";
             const resLabel =
                 downloadMode === "audio"
                     ? audioFormat.toUpperCase()
@@ -178,9 +179,13 @@ const server = http.createServer((req, res) => {
 
             if (downloadMode === "audio") {
                 args.push(
+                    "-f",
+                    "bestaudio/best",
                     "-x",
                     "--audio-format",
                     audioFormat,
+                    "--audio-quality",
+                    `${audioBitrate}K`,
                     "-o",
                     outTemplate,
                     "--no-playlist",

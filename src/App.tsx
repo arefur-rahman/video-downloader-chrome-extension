@@ -47,6 +47,7 @@ export default function App() {
     const [errorCode, setErrorCode] = useState<string | null>(null);
     const [successMsg, setSuccessMsg] = useState<string | null>(null);
     const activeTabUrlRef = useRef<string>("");
+    const mediaUrlKeyRef = useRef<string>("");
 
     const showError = useCallback((message: string, code?: string) => {
         setErrorMsg(message);
@@ -188,6 +189,7 @@ export default function App() {
 
             const urlStr = tab.url;
             activeTabUrlRef.current = urlStr;
+            mediaUrlKeyRef.current = normalizeMediaUrl(urlStr);
             setActiveTabUrl(urlStr);
             const rawTitle = tab.title || "Detected Video";
             setActiveTabTitle(rawTitle);
@@ -221,7 +223,11 @@ export default function App() {
 
                     if (response?.success && response.data) {
                         const data = response.data;
-                        if (data.url) setActiveTabUrl(data.url);
+                        if (data.url) {
+                            activeTabUrlRef.current = data.url;
+                            mediaUrlKeyRef.current = normalizeMediaUrl(data.url);
+                            setActiveTabUrl(data.url);
+                        }
                         if (data.directUrl) setActiveDirectUrl(data.directUrl);
                         if (data.platform) setPlatform(data.platform);
 
@@ -262,6 +268,81 @@ export default function App() {
             setIsLoadingMediaInfo(false);
         }
     }, [applyMediaInfo, detectPlatformFromUrl, showError]);
+
+    const pollVideoCard = useCallback(async () => {
+        if (isDownloading) return;
+
+        try {
+            const [tab] = await chrome.tabs.query({
+                active: true,
+                currentWindow: true,
+            });
+            if (!tab?.url || !tab.id) return;
+
+            if (
+                tab.url.startsWith("chrome://") ||
+                tab.url.startsWith("chrome-extension://") ||
+                tab.url.startsWith("about:")
+            ) {
+                return;
+            }
+
+            const prevMediaKey = mediaUrlKeyRef.current;
+
+            const response = (await chrome.tabs.sendMessage(tab.id, {
+                action: "GET_VIDEO_INFO",
+            })) as { success?: boolean; data?: VideoInfo };
+
+            if (!response?.success || !response.data) return;
+
+            const data = response.data;
+            const resolvedUrl = data.url || tab.url;
+            const nextMediaKey = normalizeMediaUrl(resolvedUrl);
+            const videoChanged = nextMediaKey !== prevMediaKey;
+
+            activeTabUrlRef.current = resolvedUrl;
+            mediaUrlKeyRef.current = nextMediaKey;
+            setActiveTabUrl(resolvedUrl);
+            setIsRestrictedPage(false);
+            if (data.directUrl !== undefined) setActiveDirectUrl(data.directUrl);
+            if (data.platform) setPlatform(data.platform);
+            if (data.title) setActiveTabTitle(data.title);
+            if (data.thumbnail) setThumbnail(data.thumbnail);
+
+            if (!videoChanged) return;
+
+            if (data.heights?.length) {
+                applyMediaInfo({
+                    title: data.title,
+                    thumbnail: data.thumbnail,
+                    heights: data.heights,
+                });
+                return;
+            }
+
+            setIsLoadingMediaInfo(true);
+            setAvailableHeights([]);
+            setSelectedQuality("");
+
+            const mediaResponse = (await chrome.runtime.sendMessage({
+                action: "FETCH_MEDIA_INFO",
+                url: resolvedUrl,
+                preloaded: {
+                    title: data.title,
+                    thumbnail: data.thumbnail,
+                    heights: data.heights,
+                },
+            })) as { success?: boolean; data?: MediaInfoData };
+
+            if (mediaResponse?.success && mediaResponse.data) {
+                applyMediaInfo(mediaResponse.data);
+            } else {
+                setIsLoadingMediaInfo(false);
+            }
+        } catch {
+            // Content script unavailable on this tab
+        }
+    }, [applyMediaInfo, isDownloading]);
 
     const handleRefresh = useCallback(async () => {
         setIsRefreshing(true);
@@ -313,16 +394,22 @@ export default function App() {
                 if (!cache) return;
 
                 const entry = cache[normalizeMediaUrl(activeTabUrlRef.current)];
-                if (entry?.data?.heights?.length) {
+                if (entry?.data) {
                     applyMediaInfo(entry.data);
                 }
             }
         };
 
+        const pollInterval = window.setInterval(() => {
+            if (!isMounted) return;
+            void pollVideoCard();
+        }, 2000);
+
         if (chrome.storage?.session?.onChanged) {
             chrome.storage.session.onChanged.addListener(storageListener);
             return () => {
                 isMounted = false;
+                window.clearInterval(pollInterval);
                 chrome.storage.session.onChanged.removeListener(
                     storageListener,
                 );
@@ -330,6 +417,7 @@ export default function App() {
         }
         return () => {
             isMounted = false;
+            window.clearInterval(pollInterval);
         };
     }, [
         syncDownloadSessionState,
@@ -337,6 +425,7 @@ export default function App() {
         initActiveTab,
         handleDownloadSessionUpdate,
         applyMediaInfo,
+        pollVideoCard,
     ]);
 
     // Clear alert banners on tab switch

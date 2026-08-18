@@ -36,6 +36,25 @@ interface WindowWithDetector extends Window {
         return rawTitle.replace(/^\(\d+\)\s*/, "").trim();
     }
 
+    function getYouTubeVideoId(url = window.location.href): string | null {
+        try {
+            const parsed = new URL(url);
+            const host = parsed.hostname.toLowerCase();
+            if (host.includes("youtu.be")) {
+                return parsed.pathname.slice(1).split("/")[0] || null;
+            }
+            if (
+                parsed.pathname.startsWith("/shorts/") ||
+                parsed.pathname.startsWith("/embed/")
+            ) {
+                return parsed.pathname.split("/")[2] || null;
+            }
+            return parsed.searchParams.get("v");
+        } catch {
+            return null;
+        }
+    }
+
     function extractJsonObjectAfterMarker(
         text: string,
         marker: string,
@@ -107,8 +126,9 @@ interface WindowWithDetector extends Window {
         heights?: number[];
     } | null {
         try {
-            const scripts = document.querySelectorAll("script");
-            for (const script of Array.from(scripts)) {
+            const currentVideoId = getYouTubeVideoId();
+            const scripts = Array.from(document.querySelectorAll("script")).reverse();
+            for (const script of scripts) {
                 const text = script.textContent || "";
                 if (!text.includes("ytInitialPlayerResponse")) continue;
 
@@ -126,10 +146,19 @@ interface WindowWithDetector extends Window {
                     | undefined;
                 const videoDetails = playerResponse.videoDetails as
                     | {
+                          videoId?: string;
                           title?: string;
                           thumbnail?: { url?: string }[];
                       }
                     | undefined;
+
+                if (
+                    currentVideoId &&
+                    videoDetails?.videoId &&
+                    videoDetails.videoId !== currentVideoId
+                ) {
+                    continue;
+                }
 
                 const adaptiveHeights = collectFormatHeights(
                     streamingData?.adaptiveFormats,
@@ -530,6 +559,36 @@ interface WindowWithDetector extends Window {
 
     attachVideoListeners();
     setTimeout(notifyBackground, 1000);
+
+    let lastKnownUrl = window.location.href;
+    let lastKnownTitle = document.title;
+
+    function checkPageMediaChange() {
+        const currentUrl = window.location.href;
+        const currentTitle = document.title;
+        if (
+            currentUrl !== lastKnownUrl ||
+            currentTitle !== lastKnownTitle
+        ) {
+            lastKnownUrl = currentUrl;
+            lastKnownTitle = currentTitle;
+            notifyBackground();
+        }
+    }
+
+    setInterval(checkPageMediaChange, 1500);
+
+    window.addEventListener("popstate", () => {
+        lastKnownUrl = window.location.href;
+        lastKnownTitle = document.title;
+        notifyBackground();
+    });
+
+    document.addEventListener("yt-navigate-finish", () => {
+        lastKnownUrl = window.location.href;
+        lastKnownTitle = document.title;
+        setTimeout(notifyBackground, 300);
+    });
 
     chrome.runtime.onMessage.addListener((request, _sender, sendResponse) => {
         if (request.action === "GET_VIDEO_INFO") {
