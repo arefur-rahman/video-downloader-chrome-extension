@@ -4,7 +4,7 @@ Download videos and audio from **YouTube, TikTok, Facebook, Instagram, Twitter/X
 
 Everything runs **locally on your machine**. No cloud uploads, no third-party download servers.
 
-**Download Link:** [video-downloader-chrome-extension v3.0.0](https://github.com/arefur-rahman/youtube-downloader-chrome-extension/releases/latest)
+**Download Link:** [video-downloader-chrome-extension](https://github.com/arefur-rahman/youtube-downloader-chrome-extension/releases/latest)
 
 [![BuyMeACha](https://img.shields.io/badge/☕-BuyMeACha-orange)](https://chabondhu.com/aref)
 
@@ -64,8 +64,8 @@ node --version
 
 #### Option A — Download the release *(recommended for most users)*
 
-1. **Download the latest release (v3.0.0)**
-   - Open: [video-downloader-chrome-extension v3.0.0](https://github.com/arefur-rahman/youtube-downloader-chrome-extension/releases/latest)
+1. **Download the latest release**
+   - Open: [video-downloader-chrome-extension](https://github.com/arefur-rahman/youtube-downloader-chrome-extension/releases/latest)
    - Download the **video_downloader_3.0.0.zip** file
    - Extract the ZIP to a folder you will keep (e.g. `Downloads/youtube-downloader-chrome-extension`)
 
